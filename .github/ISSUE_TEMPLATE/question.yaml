@@ -1,6 +1,6 @@
-name: Bug Report
-description: Found something you weren't expecting? Report it here!
-labels: ["bug"]
+name: Question
+description: Need any help? Ask for help here!
+labels: ["question"]
 body:
   - type: markdown
     attributes:
@@ -43,6 +43,6 @@ body:
     attributes:
       label: Description
       description: |
-        Please provide a description of your issue here
+        Please provide a description of your question here
     validations:
       required: true
