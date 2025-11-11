@@ -1,0 +1,289 @@
+name: Enforce English-Only Policy
+
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created, edited]
+  discussion:
+    types: [created, edited]
+  discussion_comment:
+    types: [created, edited]
+
+permissions:
+  issues: write
+  discussions: write
+
+jobs:
+  # ===============================================================
+  #  JOB 1: Handle non-English Issues (Title or Body)
+  # ===============================================================
+  check-issue:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issues'
+    steps:
+      - name: Check Author Association
+        id: check_author
+        run: |
+          if [ "${{ github.event.issue.author_association }}" = "NONE" ] || \
+             [ "${{ github.event.issue.author_association }}" = "FIRST_TIME_CONTRIBUTOR" ]; then
+            echo "is_external_user=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_external_user=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check Title Language
+        if: steps.check_author.outputs.is_external_user == 'true'
+        id: check_title_lang
+        uses: valeriangalliat/actions-issue-language@v1
+        with:
+          allowed-languages: "en"
+          body: ${{ github.event.issue.title }}
+
+      - name: Check Body Language
+        if: steps.check_author.outputs.is_external_user == 'true'
+        id: check_body_lang
+        uses: valeriangalliat/actions-issue-language@v1
+        with:
+          allowed-languages: "en"
+          body: ${{ github.event.issue.body }}
+
+      - name: Get Detected Language
+        id: get_lang
+        if: steps.check_author.outputs.is_external_user == 'true'
+        run: |
+          if [ "${{ steps.check_body_lang.outputs.is-allowed }}" = "false" ]; then
+            echo "lang=${{ steps.check_body_lang.outputs.language }}" >> $GITHUB_OUTPUT
+          elif [ "${{ steps.check_title_lang.outputs.is-allowed }}" = "false" ]; then
+            echo "lang=${{ steps.check_title_lang.outputs.language }}" >> $GITHUB_OUTPUT
+          else
+            echo "lang=unknown" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Close Non-English Issue
+        if: |
+          (steps.check_title_lang.outputs.is-allowed == 'false' || steps.check_body_lang.outputs.is-allowed == 'false') &&
+          steps.get_lang.outputs.lang != 'unknown'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const lang = '${{ steps.get_lang.outputs.lang }}';
+            const body = `This issue has been automatically closed because its title or body appears to be written in **${lang}**, not English.
+
+            **Please use English for all issues and discussions.**
+
+            Using English as a common language ensures that everyone—including maintainers and other community members from different countries—can at least understand **part of** the conversation and participate.
+
+            Machine-translated English (e.g., Google Translate, DeepL) is **100% welcome**.
+
+            Thank you for your cooperation!`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              state: 'closed'
+            });
+
+  # ===============================================================
+  #  JOB 2: Handle non-English Issue Comments
+  # ===============================================================
+  check-issue-comment:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issue_comment'
+    steps:
+      - name: Check Author Association
+        id: check_author
+        run: |
+          if [ "${{ github.event.comment.author_association }}" = "NONE" ] || \
+             [ "${{ github.event.comment.author_association }}" = "FIRST_TIME_CONTRIBUTOR" ]; then
+            echo "is_external_user=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_external_user=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Check Comment Language
+        if: steps.check_author.outputs.is_external_user == 'true'
+        id: check_lang
+        uses: valeriangalliat/actions-issue-language@v1
+        with:
+          allowed-languages: "en"
+          body: ${{ github.event.comment.body }}
+
+      - name: Minimize Non-English Comment
+        if: |
+          steps.check_lang.outputs.is-allowed == 'false' &&
+          steps.check_lang.outputs.language != 'unknown'
+        uses: srggrs/minimize-comment-action@v1
+        with:
+          subject-id: ${{ github.event.comment.node_id }}
+          classifier: OFF_TOPIC
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post Warning for Comment
+        if: |
+          steps.check_lang.outputs.is-allowed == 'false' &&
+          steps.check_lang.outputs.language != 'unknown'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const lang = '${{ steps.check_lang.outputs.language }}';
+            const body = `The comment above (written in **${lang}**) has been automatically hidden (minimized) as **Off-topic**.
+
+            **Please use English for all issues and discussions.**
+
+            Using English as a common language ensures that everyone—including maintainers and other community members from different countries—can at least understand **part of** the conversation and participate.
+
+            Machine-translated English (e.g., Google Translate, DeepL) is **100% welcome**.
+
+            Thank you for your cooperation!`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+
+  # ===============================================================
+  #  JOB 3: Handle non-English Discussions (Title or Body)
+  # ===============================================================
+  check-discussion:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'discussion'
+    steps:
+      - name: Check Author Association
+        id: check_author
+        run: |
+          if [ "${{ github.event.discussion.author_association }}" = "NONE" ] || \
+             [ "${{ github.event.discussion.author_association }}" = "FIRST_TIME_CONTRIBUTOR" ]; then
+            echo "is_external_user=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_external_user=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check Title Language
+        if: steps.check_author.outputs.is_external_user == 'true'
+        id: check_title_lang
+        uses: valeriangalliat/actions-issue-language@v1
+        with:
+          allowed-languages: "en"
+          body: ${{ github.event.discussion.title }}
+
+      - name: Check Body Language
+        if: steps.check_author.outputs.is_external_user == 'true'
+        id: check_body_lang
+        uses: valeriangalliat/actions-issue-language@v1
+        with:
+          allowed-languages: "en"
+          body: ${{ github.event.discussion.body }}
+
+      - name: Get Detected Language
+        id: get_lang
+        if: steps.check_author.outputs.is_external_user == 'true'
+        run: |
+          if [ "${{ steps.check_body_lang.outputs.is-allowed }}" = "false" ]; then
+            echo "lang=${{ steps.check_body_lang.outputs.language }}" >> $GITHUB_OUTPUT
+          elif [ "${{ steps.check_title_lang.outputs.is-allowed }}" = "false" ]; then
+            echo "lang=${{ steps.check_title_lang.outputs.language }}" >> $GITHUB_OUTPUT
+          else
+            echo "lang=unknown" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Lock Non-English Discussion
+        if: |
+          (steps.check_title_lang.outputs.is-allowed == 'false' || steps.check_body_lang.outputs.is-allowed == 'false') &&
+          steps.get_lang.outputs.lang != 'unknown'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const lang = '${{ steps.get_lang.outputs.lang }}';
+            const body = `This discussion has been automatically locked because its title or body appears to be written in **${lang}**, not English.
+
+            **Please use English for all issues and discussions.**
+
+            Using English as a common language ensures that everyone—including maintainers and other community members from different countries—can at least understand **part of** the conversation and participate.
+
+            Machine-translated English (e.g., Google Translate, DeepL) is **100% welcome**.
+
+            Thank you for your cooperation!`;
+
+            await github.graphql(`
+              mutation($input: AddDiscussionCommentInput!) {
+                addDiscussionComment(input: $input) { clientMutationId }
+              }
+            `, { input: { discussionId: "${{ github.event.discussion.node_id }}", body: body } });
+
+            await github.graphql(`
+              mutation($input: LockLockableInput!) {
+                lockLockable(input: $input) { clientMutationId }
+              }
+            `, { input: { lockableId: "${{ github.event.discussion.node_id }}", lockReason: "OFF_TOPIC" } });
+
+  # ===============================================================
+  #  JOB 4: Handle non-English Discussion Comments
+  # ===============================================================
+  check-discussion-comment:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'discussion_comment'
+    steps:
+      - name: Check Author Association
+        id: check_author
+        run: |
+          if [ "${{ github.event.comment.author_association }}" = "NONE" ] || \
+             [ "${{ github.event.comment.author_association }}" = "FIRST_TIME_CONTRIBUTOR" ]; then
+            echo "is_external_user=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_external_user=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Check Comment Language
+        if: steps.check_author.outputs.is_external_user == 'true'
+        id: check_lang
+        uses: valeriangalliat/actions-issue-language@v1
+        with:
+          allowed-languages: "en"
+          body: ${{ github.event.comment.body }}
+
+      - name: Minimize Non-English Comment
+        if: |
+          steps.check_lang.outputs.is-allowed == 'false' &&
+          steps.check_lang.outputs.language != 'unknown'
+        uses: srggrs/minimize-comment-action@v1
+        with:
+          subject-id: ${{ github.event.comment.node_id }}
+          classifier: OFF_TOPIC
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post Warning for Comment
+        if: |
+          steps.check_lang.outputs.is-allowed == 'false' &&
+          steps.check_lang.outputs.language != 'unknown'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const lang = '${{ steps.check_lang.outputs.language }}';
+            const body = `The comment above (written in **${lang}**) has been automatically hidden (minimized) as **Off-topic**.
+
+            **Please use English for all issues and discussions.**
+
+            Using English as a common language ensures that everyone—including maintainers and other community members from different countries—can at least understand **part of** the conversation and participate.
+
+            Machine-translated English (e.g., Google Translate, DeepL) is **100% welcome**.
+
+            Thank you for your cooperation!`;
+
+            await github.graphql(`
+              mutation($input: AddDiscussionCommentInput!) {
+                addDiscussionComment(input: $input) { clientMutationId }
+              }
+            `, { input: { discussionId: "${{ github.event.discussion.node_id }}", body: body } });
