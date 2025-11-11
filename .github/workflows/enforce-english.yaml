@@ -32,42 +32,67 @@ jobs:
             echo "is_external_user=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Setup Node.js
+        if: steps.check_author.outputs.is_external_user == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install franc-cli
+        if: steps.check_author.outputs.is_external_user == 'true'
+        run: npm install -g franc-cli
+
       - name: Check Title Language
         if: steps.check_author.outputs.is_external_user == 'true'
         id: check_title_lang
-        uses: valeriangalliat/actions-issue-language@v1
-        with:
-          allowed-languages: "en"
-          body: ${{ github.event.issue.title }}
+        run: |
+          lang_code=$(echo "$TITLE" | franc --min-length 3)
+          echo "lang_code=$lang_code" >> $GITHUB_OUTPUT
+          if [ "$lang_code" = "eng" ] || [ "$lang_code" = "und" ]; then
+            echo "is_allowed=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_allowed=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          TITLE: ${{ github.event.issue.title }}
 
       - name: Check Body Language
         if: steps.check_author.outputs.is_external_user == 'true'
         id: check_body_lang
-        uses: valeriangalliat/actions-issue-language@v1
-        with:
-          allowed-languages: "en"
-          body: ${{ github.event.issue.body }}
+        run: |
+          lang_code=$(echo "$BODY" | franc --min-length 3)
+          echo "lang_code=$lang_code" >> $GITHUB_OUTPUT
+          if [ "$lang_code" = "eng" ] || [ "$lang_code" = "und" ]; then
+            echo "is_allowed=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_allowed=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          BODY: ${{ github.event.issue.body }}
 
       - name: Get Detected Language
         id: get_lang
         if: steps.check_author.outputs.is_external_user == 'true'
         run: |
-          if [ "${{ steps.check_body_lang.outputs.is-allowed }}" = "false" ]; then
-            echo "lang=${{ steps.check_body_lang.outputs.language }}" >> $GITHUB_OUTPUT
-          elif [ "${{ steps.check_title_lang.outputs.is-allowed }}" = "false" ]; then
-            echo "lang=${{ steps.check_title_lang.outputs.language }}" >> $GITHUB_OUTPUT
+          if [ "${{ steps.check_body_lang.outputs.is_allowed }}" = "false" ]; then
+            echo "lang_code=${{ steps.check_body_lang.outputs.lang_code }}" >> $GITHUB_OUTPUT
+            echo "is_allowed=false" >> $GITHUB_OUTPUT
+          elif [ "${{ steps.check_title_lang.outputs.is_allowed }}" = "false" ]; then
+            echo "lang_code=${{ steps.check_title_lang.outputs.lang_code }}" >> $GITHUB_OUTPUT
+            echo "is_allowed=false" >> $GITHUB_OUTPUT
           else
-            echo "lang=unknown" >> $GITHUB_OUTPUT
+            echo "lang_code=eng" >> $GITHUB_OUTPUT
+            echo "is_allowed=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Close Non-English Issue
         if: |
-          (steps.check_title_lang.outputs.is-allowed == 'false' || steps.check_body_lang.outputs.is-allowed == 'false') &&
-          steps.get_lang.outputs.lang != 'unknown'
+          steps.get_lang.outputs.is_allowed == 'false' &&
+          steps.get_lang.outputs.lang_code != 'und'
         uses: actions/github-script@v7
         with:
           script: |
-            const lang = '${{ steps.get_lang.outputs.lang }}';
+            const lang = '${{ steps.get_lang.outputs.lang_code }}'; // This will be a 3-letter code (e.g., 'rus')
             const body = `This issue has been automatically closed because its title or body appears to be written in **${lang}**, not English.
 
             **Please use English for all issues and discussions.**
@@ -109,18 +134,34 @@ jobs:
             echo "is_external_user=false" >> $GITHUB_OUTPUT
           fi
       
+      - name: Setup Node.js
+        if: steps.check_author.outputs.is_external_user == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install franc-cli
+        if: steps.check_author.outputs.is_external_user == 'true'
+        run: npm install -g franc-cli
+      
       - name: Check Comment Language
         if: steps.check_author.outputs.is_external_user == 'true'
         id: check_lang
-        uses: valeriangalliat/actions-issue-language@v1
-        with:
-          allowed-languages: "en"
-          body: ${{ github.event.comment.body }}
+        run: |
+          lang_code=$(echo "$BODY" | franc --min-length 3)
+          echo "lang_code=$lang_code" >> $GITHUB_OUTPUT
+          if [ "$lang_code" = "eng" ] || [ "$lang_code" = "und" ]; then
+            echo "is_allowed=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_allowed=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          BODY: ${{ github.event.comment.body }}
 
       - name: Minimize Non-English Comment
         if: |
-          steps.check_lang.outputs.is-allowed == 'false' &&
-          steps.check_lang.outputs.language != 'unknown'
+          steps.check_lang.outputs.is_allowed == 'false' &&
+          steps.check_lang.outputs.lang_code != 'und'
         uses: srggrs/minimize-comment-action@v1
         with:
           subject-id: ${{ github.event.comment.node_id }}
@@ -130,12 +171,12 @@ jobs:
 
       - name: Post Warning for Comment
         if: |
-          steps.check_lang.outputs.is-allowed == 'false' &&
-          steps.check_lang.outputs.language != 'unknown'
+          steps.check_lang.outputs.is_allowed == 'false' &&
+          steps.check_lang.outputs.lang_code != 'und'
         uses: actions/github-script@v7
         with:
           script: |
-            const lang = '${{ steps.check_lang.outputs.language }}';
+            const lang = '${{ steps.check_lang.outputs.lang_code }}';
             const body = `The comment above (written in **${lang}**) has been automatically hidden (minimized) as **Off-topic**.
 
             **Please use English for all issues and discussions.**
@@ -170,42 +211,67 @@ jobs:
             echo "is_external_user=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Setup Node.js
+        if: steps.check_author.outputs.is_external_user == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install franc-cli
+        if: steps.check_author.outputs.is_external_user == 'true'
+        run: npm install -g franc-cli
+      
       - name: Check Title Language
         if: steps.check_author.outputs.is_external_user == 'true'
         id: check_title_lang
-        uses: valeriangalliat/actions-issue-language@v1
-        with:
-          allowed-languages: "en"
-          body: ${{ github.event.discussion.title }}
+        run: |
+          lang_code=$(echo "$TITLE" | franc --min-length 3)
+          echo "lang_code=$lang_code" >> $GITHUB_OUTPUT
+          if [ "$lang_code" = "eng" ] || [ "$lang_code" = "und" ]; then
+            echo "is_allowed=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_allowed=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          TITLE: ${{ github.event.discussion.title }}
 
       - name: Check Body Language
         if: steps.check_author.outputs.is_external_user == 'true'
         id: check_body_lang
-        uses: valeriangalliat/actions-issue-language@v1
-        with:
-          allowed-languages: "en"
-          body: ${{ github.event.discussion.body }}
+        run: |
+          lang_code=$(echo "$BODY" | franc --min-length 3)
+          echo "lang_code=$lang_code" >> $GITHUB_OUTPUT
+          if [ "$lang_code" = "eng" ] || [ "$lang_code" = "und" ]; then
+            echo "is_allowed=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_allowed=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          BODY: ${{ github.event.discussion.body }}
 
       - name: Get Detected Language
         id: get_lang
         if: steps.check_author.outputs.is_external_user == 'true'
         run: |
-          if [ "${{ steps.check_body_lang.outputs.is-allowed }}" = "false" ]; then
-            echo "lang=${{ steps.check_body_lang.outputs.language }}" >> $GITHUB_OUTPUT
-          elif [ "${{ steps.check_title_lang.outputs.is-allowed }}" = "false" ]; then
-            echo "lang=${{ steps.check_title_lang.outputs.language }}" >> $GITHUB_OUTPUT
+          if [ "${{ steps.check_body_lang.outputs.is_allowed }}" = "false" ]; then
+            echo "lang_code=${{ steps.check_body_lang.outputs.lang_code }}" >> $GITHUB_OUTPUT
+            echo "is_allowed=false" >> $GITHUB_OUTPUT
+          elif [ "${{ steps.check_title_lang.outputs.is_allowed }}" = "false" ]; then
+            echo "lang_code=${{ steps.check_title_lang.outputs.lang_code }}" >> $GITHUB_OUTPUT
+            echo "is_allowed=false" >> $GITHUB_OUTPUT
           else
-            echo "lang=unknown" >> $GITHUB_OUTPUT
+            echo "lang_code=eng" >> $GITHUB_OUTPUT
+            echo "is_allowed=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Lock Non-English Discussion
         if: |
-          (steps.check_title_lang.outputs.is-allowed == 'false' || steps.check_body_lang.outputs.is-allowed == 'false') &&
-          steps.get_lang.outputs.lang != 'unknown'
+          steps.get_lang.outputs.is_allowed == 'false' &&
+          steps.get_lang.outputs.lang_code != 'und'
         uses: actions/github-script@v7
         with:
           script: |
-            const lang = '${{ steps.get_lang.outputs.lang }}';
+            const lang = '${{ steps.get_lang.outputs.lang_code }}';
             const body = `This discussion has been automatically locked because its title or body appears to be written in **${lang}**, not English.
 
             **Please use English for all issues and discussions.**
@@ -245,18 +311,34 @@ jobs:
             echo "is_external_user=false" >> $GITHUB_OUTPUT
           fi
       
+      - name: Setup Node.js
+        if: steps.check_author.outputs.is_external_user == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install franc-cli
+        if: steps.check_author.outputs.is_external_user == 'true'
+        run: npm install -g franc-cli
+      
       - name: Check Comment Language
         if: steps.check_author.outputs.is_external_user == 'true'
         id: check_lang
-        uses: valeriangalliat/actions-issue-language@v1
-        with:
-          allowed-languages: "en"
-          body: ${{ github.event.comment.body }}
+        run: |
+          lang_code=$(echo "$BODY" | franc --min-length 3)
+          echo "lang_code=$lang_code" >> $GITHUB_OUTPUT
+          if [ "$lang_code" = "eng" ] || [ "$lang_code" = "und" ]; then
+            echo "is_allowed=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_allowed=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          BODY: ${{ github.event.comment.body }}
 
       - name: Minimize Non-English Comment
         if: |
-          steps.check_lang.outputs.is-allowed == 'false' &&
-          steps.check_lang.outputs.language != 'unknown'
+          steps.check_lang.outputs.is_allowed == 'false' &&
+          steps.check_lang.outputs.lang_code != 'und'
         uses: srggrs/minimize-comment-action@v1
         with:
           subject-id: ${{ github.event.comment.node_id }}
@@ -266,12 +348,12 @@ jobs:
 
       - name: Post Warning for Comment
         if: |
-          steps.check_lang.outputs.is-allowed == 'false' &&
-          steps.check_lang.outputs.language != 'unknown'
+          steps.check_lang.outputs.is_allowed == 'false' &&
+          steps.check_lang.outputs.lang_code != 'und'
         uses: actions/github-script@v7
         with:
           script: |
-            const lang = '${{ steps.check_lang.outputs.language }}';
+            const lang = '${{ steps.check_lang.outputs.lang_code }}';
             const body = `The comment above (written in **${lang}**) has been automatically hidden (minimized) as **Off-topic**.
 
             **Please use English for all issues and discussions.**
