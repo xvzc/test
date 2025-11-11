@@ -82,4 +82,234 @@ jobs:
 
             **Please use English for all issues and discussions.**
 
-            Using English as a common language ensures that everyone—including maintainers and other community members from
+            Using English as a common language ensures that everyone—including maintainers and other community members from different countries—can at least understand **part of** the conversation and participate.
+
+            Machine-translated English (e.g., Google Translate, DeepL) is **100% welcome**.
+
+            Thank you for your cooperation!`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              state: 'closed'
+            });
+
+  # ===============================================================
+  #  JOB 2: Handle non-English Issue Comments
+  # ===============================================================
+  check-issue-comment:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issue_comment'
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install franc-cli
+        run: npm install -g franc-cli
+      
+      - name: Check Comment Language
+        id: check_lang
+        run: |
+          lang_code=$(echo "$BODY" | franc --min-length 3)
+          echo "lang_code=$lang_code" >> $GITHUB_OUTPUT
+          if [ "$lang_code" = "eng" ] || [ "$lang_code" = "und" ]; then
+            echo "is_allowed=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_allowed=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          BODY: ${{ github.event.comment.body }}
+
+      - name: Minimize Non-English Comment
+        if: |
+          steps.check_lang.outputs.is_allowed == 'false' &&
+          steps.check_lang.outputs.lang_code != 'und'
+        uses: srggrs/minimize-comment-action@v1
+        with:
+          subject-id: ${{ github.event.comment.node_id }}
+          classifier: OFF_TOPIC
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post Warning for Comment
+        if: |
+          steps.check_lang.outputs.is_allowed == 'false' &&
+          steps.check_lang.outputs.lang_code != 'und'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const lang = '${{ steps.check_lang.outputs.lang_code }}';
+            const body = `The comment above (written in **${lang}**) has been automatically hidden (minimized) as **Off-topic**.
+
+            **Please use English for all issues and discussions.**
+
+            Using English as a common language ensures that everyone—including maintainers and other community members from different countries—can at least understand **part of** the conversation and participate.
+
+            Machine-translated English (e.g., Google Translate, DeepL) is **100% welcome**.
+
+            Thank you for your cooperation!`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+
+  # ===============================================================
+  #  JOB 3: Handle non-English Discussions (Title or Body)
+  # ===============================================================
+  check-discussion:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'discussion'
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install franc-cli
+        run: npm install -g franc-cli
+      
+      - name: Check Title Language
+        id: check_title_lang
+        run: |
+          lang_code=$(echo "$TITLE" | franc --min-length 3)
+          echo "lang_code=$lang_code" >> $GITHUB_OUTPUT
+          if [ "$lang_code" = "eng" ] || [ "$lang_code" = "und" ]; then
+            echo "is_allowed=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_allowed=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          TITLE: ${{ github.event.discussion.title }}
+
+      - name: Check Body Language
+        id: check_body_lang
+        run: |
+          lang_code=$(echo "$BODY" | franc --min-length 3)
+          echo "lang_code=$lang_code" >> $GITHUB_OUTPUT
+          if [ "$lang_code" = "eng" ] || [ "$lang_code" = "und" ]; then
+            echo "is_allowed=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_allowed=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          BODY: ${{ github.event.discussion.body }}
+
+      - name: Get Detected Language
+        id: get_lang
+        run: |
+          if [ "${{ steps.check_body_lang.outputs.is_allowed }}" = "false" ]; then
+            echo "lang_code=${{ steps.check_body_lang.outputs.lang_code }}" >> $GITHUB_OUTPUT
+            echo "is_allowed=false" >> $GITHUB_OUTPUT
+          elif [ "${{ steps.check_title_lang.outputs.is_allowed }}" = "false" ]; then
+            echo "lang_code=${{ steps.check_title_lang.outputs.lang_code }}" >> $GITHUB_OUTPUT
+            echo "is_allowed=false" >> $GITHUB_OUTPUT
+          else
+            echo "lang_code=eng" >> $GITHUB_OUTPUT
+            echo "is_allowed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Lock Non-English Discussion
+        if: |
+          steps.get_lang.outputs.is_allowed == 'false' &&
+          steps.get_lang.outputs.lang_code != 'und'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const lang = '${{ steps.get_lang.outputs.lang_code }}';
+            const body = `This discussion has been automatically locked because its title or body appears to be written in **${lang}**, not English.
+
+            **Please use English for all issues and discussions.**
+
+            Using English as a common language ensures that everyone—including maintainers and other community members from different countries—can at least understand **part of** the conversation and participate.
+
+            Machine-translated English (e.g., Google Translate, DeepL) is **100% welcome**.
+
+            Thank you for your cooperation!`;
+
+            await github.graphql(`
+              mutation($input: AddDiscussionCommentInput!) {
+                addDiscussionComment(input: $input) { clientMutationId }
+              }
+            `, { input: { discussionId: "${{ github.event.discussion.node_id }}", body: body } });
+
+            await github.graphql(`
+              mutation($input: LockLockableInput!) {
+                lockLockable(input: $input) { clientMutationId }
+              }
+            `, { input: { lockableId: "${{ github.event.discussion.node_id }}", lockReason: "OFF_TOPIC" } });
+
+  # ===============================================================
+  #  JOB 4: Handle non-English Discussion Comments
+  # ===============================================================
+  check-discussion-comment:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'discussion_comment'
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install franc-cli
+        run: npm install -g franc-cli
+      
+      - name: Check Comment Language
+        id: check_lang
+        run: |
+          lang_code=$(echo "$BODY" | franc --min-length 3)
+          echo "lang_code=$lang_code" >> $GITHUB_OUTPUT
+          if [ "$lang_code" = "eng" ] || [ "$lang_code" = "und" ]; then
+            echo "is_allowed=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_allowed=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          BODY: ${{ github.event.comment.body }}
+
+      - name: Minimize Non-English Comment
+        if: |
+          steps.check_lang.outputs.is_allowed == 'false' &&
+          steps.check_lang.outputs.lang_code != 'und'
+        uses: srggrs/minimize-comment-action@v1
+        with:
+          subject-id: ${{ github.event.comment.node_id }}
+          classifier: OFF_TOPIC
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post Warning for Comment
+        if: |
+          steps.check_lang.outputs.is_allowed == 'false' &&
+          steps.check_lang.outputs.lang_code != 'und'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const lang = '${{ steps.check_lang.outputs.lang_code }}';
+            const body = `The comment above (written in **${lang}**) has been automatically hidden (minimized) as **Off-topic**.
+
+            **Please use English for all issues and discussions.**
+
+            Using English as a common language ensures that everyone—including maintainers and other community members from different countries—can at least understand **part of** the conversation and participate.
+
+            Machine-translated English (e.g., Google Translate, DeepL) is **100% welcome**.
+
+            Thank you for your cooperation!`;
+
+            await github.graphql(`
+              mutation($input: AddDiscussionCommentInput!) {
+                addDiscussionComment(input: $input) { clientMutationId }
+              }
+            `, { input: { discussionId: "${{ github.event.discussion.node_id }}", body: body } });
