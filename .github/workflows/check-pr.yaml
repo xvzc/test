@@ -16,18 +16,23 @@ permissions:
 
 jobs:
   require-label:
-  - uses: mheap/github-action-required-labels@v5
-    with:
-      mode: minimum
-      count: 1
-      labels: |
-        feature
-        bug
-        documentation
-        style
-        refactor
-        performance
-        test
-        chore
-        ci
-        revert
+    name: Require Labels
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - uses: mheap/github-action-required-labels@v5
+        with:
+          mode: minimum
+          count: 1
+          labels: |
+            feature
+            bug
+            documentation
+            style
+            refactor
+            performance
+            test
+            chore
+            ci
+            revert
