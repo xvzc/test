@@ -3,3 +3,4 @@
     <img src="https://repology.org/badge/vertical-allrepos/spoofdpi.svg" alt="">
 </a>
 
+o
