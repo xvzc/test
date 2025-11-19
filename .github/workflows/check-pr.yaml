@@ -9,6 +9,7 @@ on:
       - opened
       - edited
       - synchronize
+      - labeled
 
 permissions:
   pull-requests: read
