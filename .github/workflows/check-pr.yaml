@@ -1,0 +1,33 @@
+# This workflow validates that Pull Request titles adhere to the
+# Conventional Commit specification defined in the project.
+# It runs on PRs being opened, edited, or synchronized.
+name: Lint Pull Request
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - edited
+      - synchronize
+
+permissions:
+  pull-requests: read
+  statuses: write # Required to set the "check" status on the PR
+
+jobs:
+  require-label:
+  - uses: mheap/github-action-required-labels@v5
+    with:
+      mode: minimum
+      count: 1
+      labels: |
+        feature
+        bug
+        documentation
+        style
+        refactor
+        performance
+        test
+        chore
+        ci
+        revert
